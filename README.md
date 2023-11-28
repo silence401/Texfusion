@@ -12,14 +12,14 @@ an unofficial implement of paper [&#34;TexFusion: Synthesizing 3D Textures with 
 #### 1.environments:
 
 ```powershell
-pip install -r requirements.py
+pip install -r requirements.txt
 % Need install kaolin[little difference from official] in thirdparty 
 cd thirdparty/kaolin/ & pip install -e .
 pip install git+https://github.com/NVlabs/nvdiffrast/
 pip install --global-option="--no-networks" git+https://github.com/NVlabs/tiny-cuda-nn#subdirectory=bindings/torch
 ```
 
-#### 2. Usage:
+#### 2. inference:
 
 ```powershell
 modify config/config.py
