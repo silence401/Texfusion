@@ -9,7 +9,7 @@ an unofficial implement of paper [&#34;TexFusion: Synthesizing 3D Textures with 
 
 ## Usage:
 
-#### 1.enviroments:
+#### 1.environments:
 
 ```powershell
 pip install -r requirements.py
