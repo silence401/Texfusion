@@ -140,13 +140,13 @@ class TexFusion(object):
         for ts in tqdm(range(len(self.timesteps))):      
             self.interlaced_denoise(ts, tau=0.5)
         
-        ###update_camera_pose###
+        ##############update_camera_pose###
         self.dataset = CameraDataset(device=self.device, mode='round2')
         self.camera_poses = self.get_camera_poses()
         self.cache = None
         self.render_images(self.texture_map, self.camera_poses)
         self.numviews = self.camera_poses['elevs'].shape[0]
-        self.texture_map = F.interpolate(self.texture_map, scale_factor=2., mode='nearest')
+        self.texture_map = F.interpolate(self.texture_map, scale_factor=6., mode='nearest')
         self.prompt_embeds = []
         for i in range(self.numviews):
             # import pdb; pdb.set_trace()
@@ -156,8 +156,8 @@ class TexFusion(object):
         self.depths = self.mvd.preprocess_control_image(self.depth_512.permute(0, 3, 1, 2)) #permute B H W C ==> B C H W
         self.depths = self.depths.repeat_interleave(3, dim=1)
         self.update_Q() 
+        #######################################
 
-        #import pdb; pdb.set_trace()
         for ts in tqdm(range(20, len(self.timesteps))):
             self.interlaced_denoise(ts, tau=0)
         
@@ -223,8 +223,8 @@ class TexFusion(object):
         uv_features = uv_features * 2 - 1
         uv_features[:, :, 1] = -uv_features[:, :, 1]
 
-        u = torch.round(((uv_features[:, :, 0]+1) * self.texture_map.shape[3]-1)/2).to(torch.int)  #align kaolin.mesh.texture_mapping
-        v = torch.round(((uv_features[:, :, 1]+1) * self.texture_map.shape[2]-1)/2).to(torch.int)
+        u = torch.round(((uv_features[:, :, 0]+1) * self.texture_map.shape[3]-1)/2).to(torch.long)  #align kaolin.mesh.texture_mapping
+        v = torch.round(((uv_features[:, :, 1]+1) * self.texture_map.shape[2]-1)/2).to(torch.long)
 
         new_uv = torch.stack((v, u), dim=-1) #H, W, 2
         new_uv = new_uv.clamp(0, (self.texture_map.shape[2] - 1))
@@ -256,9 +256,10 @@ class TexFusion(object):
             self.texture_update_mask = self.texture_update_mask | tmp_update_mask
         
         #import pdb; pdb.set_trace()
-        texture_map_mask_pil = tf.ToPILImage()(self.texture_update_mask[0][:3, ...].to(torch.float))
-        texture_map_mask_pil.save("mask_{:04d}.png".format(self.count))
-        self.count = self.count + 1
+        ### save update_mask for debug
+        # texture_map_mask_pil = tf.ToPILImage()(self.texture_update_mask[0][:3, ...].to(torch.float))
+        # texture_map_mask_pil.save("mask_{:04d}.png".format(self.count))
+        # self.count = self.count + 1
         #self.texture_map = self.texture_map.clamp(0, 1)
 
     def update_Q(self):
@@ -271,8 +272,8 @@ class TexFusion(object):
             uv_features = self.cache[i]
             uv_features = uv_features * 2 - 1
             uv_features[:, :, 1] = -uv_features[:, :, 1]
-            u = torch.round(((uv_features[:, :, 0]+1) * self.texture_map.shape[3]-1)/2).to(torch.int)  #align kaolin.mesh.texture_mapping
-            v = torch.round(((uv_features[:, :, 1]+1) * self.texture_map.shape[2]-1)/2).to(torch.int)
+            u = torch.round(((uv_features[:, :, 0]+1) * self.texture_map.shape[3]-1)/2).to(torch.long)  #align kaolin.mesh.texture_mapping
+            v = torch.round(((uv_features[:, :, 1]+1) * self.texture_map.shape[2]-1)/2).to(torch.long)
             new_uv = torch.stack((v, u), dim=-1) #H, W, 2
             new_uv = new_uv.clamp(0, (self.texture_map.shape[2] - 1))
             mask = self.mask[i].permute(1, 2, 0) # H, W, 1
