@@ -397,7 +397,7 @@ class TexFusion(object):
 def main(cfg: ModelConfig):
     texfusion = TexFusion(cfg, device='cuda')
     # import pdb; pdb.set_trace()
-    mesh_path = '/workspace/code/baidu/ar/neural_engine/algorithms/text23D/data/nascar.obj'
+    mesh_path = './data/nascar.obj'
     prompt = 'yellow car'
     output_path = os.path.join('outputs', datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
     texfusion.texture(mesh_path, prompt, output_path)
