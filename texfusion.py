@@ -78,7 +78,7 @@ class TexFusion(object):
         self.mesh = self.preprocess_mesh(self.mesh)
         
         if self.mode == 'latent':
-            zT = torch.randn(1, 4,  self.cfg.res[1] // 6, self.cfg.res[0] // 6).to(self.device)
+            zT = torch.randn(1, 4,  self.cfg.res[1] // 6, self.cfg.res[0] // 6).to(self.device) # 6 is experimental parameters
             self.texture_map = torch.nn.parameter.Parameter(zT, requires_grad=False).to(self.device)
             self.texture_map_cur = torch.nn.parameter.Parameter(zT, requires_grad=False).to(self.device)
         else:
@@ -136,11 +136,19 @@ class TexFusion(object):
         self.background_latent = self.mvd.encode_images(background_img).to(self.prompt_embeds[0].dtype)
         self.background_noise = torch.randn((1, 4, 64, 64)).to(self.device).to(self.prompt_embeds[0].dtype)
 
-        # import pdb; pdb.set_trace()
         for ts in tqdm(range(len(self.timesteps))):      
             self.interlaced_denoise(ts, tau=0.5)
         
-        ##############update_camera_pose###
+        #save results of different view
+        with torch.no_grad():
+            for i in range(self.numviews):
+                view_img = self.render_images(texture_map=self.texture_map, index=i).permute(0, 3, 1, 2)
+                view_img = (self.mask[i].to(torch.float) * view_img) + ((1 - self.mask[i].to(torch.float)) * self.background_latent) 
+                decode_img = self.mvd.decode_latents(view_img.to(torch.float16)).detach().to(torch.float32)
+                tmp_img =  tf.ToPILImage()(decode_img[0]).convert('RGB')
+                tmp_img.save(os.path.join(output_path, 'stage1_{:04d}.png'.format(i)))
+        
+        ##############update_camera_pose###########
         self.dataset = CameraDataset(device=self.device, mode='round2')
         self.camera_poses = self.get_camera_poses()
         self.cache = None
@@ -156,7 +164,7 @@ class TexFusion(object):
         self.depths = self.mvd.preprocess_control_image(self.depth_512.permute(0, 3, 1, 2)) #permute B H W C ==> B C H W
         self.depths = self.depths.repeat_interleave(3, dim=1)
         self.update_Q() 
-        #######################################
+        ###########################################
 
         for ts in tqdm(range(20, len(self.timesteps))):
             self.interlaced_denoise(ts, tau=0)
@@ -169,7 +177,7 @@ class TexFusion(object):
                 decode_img = self.mvd.decode_latents(view_img.to(torch.float16)).detach().to(torch.float32)
                 self.final_images.append(decode_img)
                 tmp_img =  tf.ToPILImage()(self.final_images[i][0]).convert('RGB')
-                tmp_img.save(os.path.join(output_path, '{:04d}.png'.format(i)))
+                tmp_img.save(os.path.join(output_path, 'stage2_{:04d}.png'.format(i)))
         
         self.nerf()
 
@@ -184,6 +192,7 @@ class TexFusion(object):
         """
         # import pdb; pdb.set_trace()
         for v in range(self.numviews):
+            # import pdb; pdb.set_trace()
             texture_map_noise = torch.randn_like(self.texture_map).to(self.device).to(self.prompt_embeds[0].dtype)
             if (v > 0) and (ts < len(self.timesteps) - 1):
                 with torch.no_grad():
@@ -196,12 +205,6 @@ class TexFusion(object):
                 view_img = self.render_images(texture_map=cur_texture_map, index=v).permute(0, 3, 1, 2)
                 view_latent = view_img
 
-
-                ### 1. denoise
-                view_latent = self.mvd(prompt_embeds=self.prompt_embeds[v], control_image=self.depths[v].unsqueeze(0), \
-                        latents=view_latent, t=self.timesteps[ts], tau=tau, controlnet_conditioning_scale=1.0)
-
-                ## follow  inpainting pipeline 
                 init_latent_proper = self.background_latent
                 if ts != len(self.timesteps) - 1:
                     noise_timestep = self.timesteps[ts + 1]
@@ -211,6 +214,21 @@ class TexFusion(object):
                     )
 
                 view_latent = (self.mask[v].to(torch.float) * view_latent) + ((1 - self.mask[v].to(torch.float)) * init_latent_proper)
+
+                ### 1. denoise
+                view_latent = self.mvd(prompt_embeds=self.prompt_embeds[v], control_image=self.depths[v].unsqueeze(0), \
+                        latents=view_latent, t=self.timesteps[ts], tau=tau, controlnet_conditioning_scale=1.0)
+
+                ## follow  inpainting pipeline 
+                # init_latent_proper = self.background_latent
+                # if ts != len(self.timesteps) - 1:
+                #     noise_timestep = self.timesteps[ts + 1]
+                #     init_latent_proper = self.mvd.scheduler.add_noise(
+                #             self.background_latent, self.background_noise,
+                #             noise_timestep,
+                #     )
+
+                # view_latent = (self.mask[v].to(torch.float) * view_latent) + ((1 - self.mask[v].to(torch.float)) * init_latent_proper)
 
             self.update_texture(view_latent, v)
                 
