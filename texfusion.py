@@ -286,6 +286,7 @@ class TexFusion(object):
         """
         #import pdb; pdb.set_trace()
         self.Q = torch.zeros((self.numviews, 1, self.texture_map.shape[2], self.texture_map.shape[3])).to(self.device)
+        self.Q -= 1e-9
         for i in range(self.numviews):
             uv_features = self.cache[i]
             uv_features = uv_features * 2 - 1
@@ -313,8 +314,8 @@ class TexFusion(object):
             self.depth_512 = cdq[1].detach()
             self.derivatives_512 = cdq[2].detach() #[B, 4, H, W]
             
-            self.quality_512 = torch.abs(self.derivatives_512[..., 0] * self.derivatives_512[..., 3] - \
-                    self.derivatives_512[..., 1] * self.derivatives_512[..., 2])  #ref texfusion paper #B, 1, H, W
+            self.quality_512 = -(torch.abs(self.derivatives_512[..., 0] * self.derivatives_512[..., 3] - \
+                    self.derivatives_512[..., 1] * self.derivatives_512[..., 2]))  #ref texfusion paper #B, 1, H, W
             
             self.quality_512 = self.quality_512.unsqueeze(-1)
             self.mask_512 = mask.detach() 
@@ -336,8 +337,8 @@ class TexFusion(object):
                     return_cache=True, return_depth=True, return_derivatives=True)
             self.cache = cdq[0].detach()
             self.derivatives = cdq[2].detach() #[B, 4, H, W]
-            self.quality = torch.abs(self.derivatives[..., 0] * self.derivatives[..., 3] - \
-                self.derivatives[..., 1] * self.derivatives[..., 2])  #ref texfusion paper #B, 1, H, W
+            self.quality = -(torch.abs(self.derivatives[..., 0] * self.derivatives[..., 3] - \
+                self.derivatives[..., 1] * self.derivatives[..., 2]))  #ref texfusion paper #B, 1, H, W
             self.quality = self.quality.unsqueeze(-1)
             
             print(self.quality.max(), self.quality.min())
