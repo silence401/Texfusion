@@ -108,10 +108,10 @@ class TexFusion(object):
     def texture(self, mesh_path, prompt, output_path, mode='latent'):
         # import pdb; pdb.set_trace()
         os.makedirs(output_path, exist_ok=True)
+        self.output_path = output_path
         self.reset(mesh_path, prompt, mode)
         os.makedirs(os.path.join(output_path, 'mesh'), exist_ok=True)
         write_obj(os.path.join(output_path, 'mesh'), self.mesh)
-        self.output_path = output_path
         def sd_inference(i=0):
             """
             test diffusion inference is right?
@@ -154,7 +154,7 @@ class TexFusion(object):
         self.cache = None
         self.render_images(self.texture_map, self.camera_poses)
         self.numviews = self.camera_poses['elevs'].shape[0]
-        self.texture_map = F.interpolate(self.texture_map, scale_factor=6., mode='nearest')
+        self.texture_map = F.interpolate(self.texture_map, scale_factor=3., mode='nearest')
         self.prompt_embeds = []
         for i in range(self.numviews):
             # import pdb; pdb.set_trace()
@@ -203,6 +203,7 @@ class TexFusion(object):
             
             with torch.no_grad():
                 view_img = self.render_images(texture_map=cur_texture_map, index=v).permute(0, 3, 1, 2)
+                
                 view_latent = view_img
 
                 init_latent_proper = self.background_latent
@@ -231,6 +232,13 @@ class TexFusion(object):
                 # view_latent = (self.mask[v].to(torch.float) * view_latent) + ((1 - self.mask[v].to(torch.float)) * init_latent_proper)
 
             self.update_texture(view_latent, v)
+            #save mask to debug
+            view_mask = self.render_images(self.tmp_update_mask.float(), index=v).permute(0, 3, 1, 2)
+            view_mask_img = tf.ToPILImage()(view_mask[0])
+            view_mask_img.save(os.path.join(self.output_path, 'mask_{:02d}.png'.format(v)))
+            
+
+
                 
     def update_texture(self, img, idx):
         texture_map_bkp = self.texture_map.detach().clone()
@@ -265,6 +273,7 @@ class TexFusion(object):
             self.texture_update_mask = torch.zeros_like(self.texture_map) > 0
             self.texture_update_mask[:, :, new_uv[:, 0], new_uv[:, 1]] = True
             self.cur_Q = self.Q[0]
+            self.tmp_update_mask = self.texture_update_mask
         else:
             tmp_update_mask = torch.zeros_like(self.texture_map) > 0
             tmp_update_mask[:, :, new_uv[:, 0], new_uv[:, 1]] = True
@@ -272,7 +281,7 @@ class TexFusion(object):
             self.cur_Q = torch.maximum(self.cur_Q, self.Q[idx])
             self.texture_map[~tmp_update_mask] = texture_map_bkp[~tmp_update_mask]
             self.texture_update_mask = self.texture_update_mask | tmp_update_mask
-        
+            self.tmp_update_mask = tmp_update_mask
         #import pdb; pdb.set_trace()
         ### save update_mask for debug
         # texture_map_mask_pil = tf.ToPILImage()(self.texture_update_mask[0][:3, ...].to(torch.float))
@@ -286,13 +295,13 @@ class TexFusion(object):
         """
         #import pdb; pdb.set_trace()
         self.Q = torch.zeros((self.numviews, 1, self.texture_map.shape[2], self.texture_map.shape[3])).to(self.device)
-        self.Q -= 1e-9
+        self.Q -= 1e9
         for i in range(self.numviews):
             uv_features = self.cache[i]
             uv_features = uv_features * 2 - 1
             uv_features[:, :, 1] = -uv_features[:, :, 1]
-            u = torch.round(((uv_features[:, :, 0]+1) * self.texture_map.shape[3]-1)/2).to(torch.long)  #align kaolin.mesh.texture_mapping
-            v = torch.round(((uv_features[:, :, 1]+1) * self.texture_map.shape[2]-1)/2).to(torch.long)
+            u = torch.round(((uv_features[:, :, 0] + 1) * self.texture_map.shape[3]-1) / 2).to(torch.long)  #align kaolin.mesh.texture_mapping
+            v = torch.round(((uv_features[:, :, 1] + 1) * self.texture_map.shape[2]-1) / 2).to(torch.long)
             new_uv = torch.stack((v, u), dim=-1) #H, W, 2
             new_uv = new_uv.clamp(0, (self.texture_map.shape[2] - 1))
             mask = self.mask[i].permute(1, 2, 0) # H, W, 1
@@ -326,11 +335,12 @@ class TexFusion(object):
                 import matplotlib.pyplot as plt
                 for i in range(quality.shape[0]):
                     qua = quality[i]
-                    qua = qua - qua.min()
-                    mask_ = mask[i, 0]
-                    qua[mask_==0] = 0.
-                    qua = qua / (qua.max() - qua.min())
-                    plt.imsave(os.path.join(self.output_path, 'qua{:03d}.png'.format(i)), qua.cpu().numpy(), cmap='hot')
+                    # qua = qua - qua.min()
+                    # mask_ = mask[i, 0]
+                    # qua[mask_==0] = 0.
+                    # qua = qua / (qua.max() - qua.min())
+                    # plt.imsave(os.path.join(self.output_path, 'qua{:03d}.png'.format(i)), qua.cpu().numpy(), cmap='hot')
+                    np.save(os.path.join(self.output_path, 'qua{:03d}.npy'.format(i)), qua.cpu().numpy())
             _, mask, cdq = render_single_view_texture(self.verts, self.faces, self.uv_face_attr,
                 self.texture_map, elev=camera_poses['elevs'], fov=camera_poses['fov'], azim=camera_poses['azims'], \
                     radius=camera_poses['radius'], dims=dims,\
@@ -340,9 +350,9 @@ class TexFusion(object):
             self.quality = -(torch.abs(self.derivatives[..., 0] * self.derivatives[..., 3] - \
                 self.derivatives[..., 1] * self.derivatives[..., 2]))  #ref texfusion paper #B, 1, H, W
             self.quality = self.quality.unsqueeze(-1)
-            
             print(self.quality.max(), self.quality.min())
             self.mask = mask.detach()
+            #save_quality(self.quality, self.mask)
 
         else:
             img = self.render_from_cache(texture_map, index, mode=mode)
