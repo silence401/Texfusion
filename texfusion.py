@@ -69,6 +69,63 @@ class TexFusion(object):
         return new_mesh
 
 
+    def save_poses(self, data, save_path='view_images'):
+        """
+        save_poses
+        """
+        mv, mvp, campos, proj = eluer2camerapose(data)
+        if save_path == 'zero123plus_views':
+            mv = mv[1:]
+        os.makedirs(os.path.join(self.output_path, save_path), exist_ok=True)
+        for i in range(mv.shape[0]):
+            f_open = open(os.path.join(self.output_path, save_path, '{:02d}.cam').format(i), 'w')
+            tx = mv[i, 0, 3]
+            ty = mv[i, 1, 3]
+            tz = mv[i, 2, 3]
+            R00 = mv[i, 0, 0]
+            R01 = mv[i, 0, 1]
+            R02 = mv[i, 0, 2]
+            R10 = mv[i, 1, 0]
+            R11 = mv[i, 1, 1]
+            R12 = mv[i, 1, 2]
+            R20 = mv[i, 2, 0]
+            R21 = mv[i, 2, 1]
+            R22 = mv[i, 2, 2]
+            fx = proj[i, 0, 0]
+            f_open.write('%f %f %f %f %f %f %f %f %f %f %f %f\n'%(tx, ty, tz, R00, R01, R02, R10, R11, R12, R20, R21, R22))
+            f_open.write('%f %f %f %f %f %f\n'%(fx / 2, 0.0, 0.0, 1.0, 0.5, 0.5))
+            f_open.close()
+    
+        def run_mvstexturing(self, scene_path=None, out_path=None):
+        """
+        run_mvstexturing
+        """
+        out_path = os.path.join(self.output_path, 'mvstexturing')
+        if not os.path.exists(out_path):
+            os.makedirs(out_path)
+        
+        tmp_dir = os.path.join(self.output_path, 'mvstexturing', 'tmp')
+        if os.path.exists(tmp_dir):
+              shutil.rmtree(tmp_dir)
+        
+        mesh_path = os.path.join(self.output_path, 'mesh', 'mesh.ply')
+        if scene_path is None:
+            scene_path = os.path.join(self.output_path, 'view_images')
+        if out_path is None:
+            out_path = os.path.join(out_path, 'mesh')
+
+        cmd = ["texrecon", scene_path, mesh_path, out_path, "--no_intermediate_results", "--keep_unseen_faces"]
+        try:
+            process = subprocess.Popen(cmd)
+            process.wait()
+            #texture_img_path = os.path.join('./output', 'texture_mesh_material0000_map_Kd.png')
+            # self.expand_img(texture_img_path)
+            return out_path+'.obj'
+        except:
+            print(' subprocess.Popen(cmd) error')
+        print("mvstexturing over")
+        
+
     def reset(self, mesh_path, prompt, mode):
         """
         reset the model
