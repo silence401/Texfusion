@@ -124,7 +124,7 @@ class TexFusion(object):
         except:
             print(' subprocess.Popen(cmd) error')
         print("mvstexturing over")
-        
+
 
     def reset(self, mesh_path, prompt, mode):
         """
@@ -222,6 +222,7 @@ class TexFusion(object):
         self.depths = self.depths.repeat_interleave(3, dim=1)
         self.update_Q() 
         ###########################################
+        #TODO add noise in texture_map with T=500
 
         for ts in tqdm(range(20, len(self.timesteps))):
             self.interlaced_denoise(ts, tau=0)

@@ -466,13 +466,8 @@ class DDIMScheduler(SchedulerMixin, ConfigMixin):
                 )
             variance = std_dev_t * variance_noise
 
-            prev_sample = prev_sample + variance
-
-        if tau > 0:
-            added_noise = randn_tensor(
-                    model_output.shape, generator=generator, device=model_output.device, dtype=model_output.dtype
-                )
-            prev_sample = prev_sample + tau * self.betas[timestep] * added_noise
+            if tau > 0:
+                prev_sample = prev_sample + tau * variance
             
         if not return_dict:
             return (prev_sample,)
