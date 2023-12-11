@@ -15,11 +15,8 @@ def get_view_direction(thetas, phis, overhead, front):
     # first determine by phis
     phis = phis % (2 * np.pi)
     res[(phis >= (2 * np.pi - front / 2)) | (phis < front / 2)] = 0
-
     res[(phis >= front / 2) & (phis < (np.pi - front / 2))] = 1
-
     res[(phis >= (np.pi - front / 2)) & (phis < (np.pi + front / 2))] = 2
-
     # res[(phis >= (np.pi + front))] = 3
     res[(phis >= (np.pi + front / 2)) & (phis < (2 * np.pi - front / 2))] = 3
     # override by thetas
