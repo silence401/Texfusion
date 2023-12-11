@@ -20,6 +20,64 @@ class NeRFType(Enum):
     rgb: str = "rgb"
     latent_tune: str = "latent_tune"
 
+
+def perspective(fovy=0.7854, aspect=1.0, n=0.1, f=1000.0, device=None):
+    """
+    perspective
+    """
+    y = np.tan(fovy / 2)
+    return torch.tensor([[1/(y*aspect),    0,            0,              0],
+                         [           0, 1/-y,            0,              0],
+                         [           0,    0, -(f+n)/(f-n), -(2*f*n)/(f-n)],
+                         [           0,    0,           -1,              0]], dtype=torch.float32, device=device)
+
+def eluer2camerapose(data, dims=[512, 512], near=0.1, far=10000, index=0, device='cuda'):
+    """
+    eluer2camerapose
+    """
+    # import pdb; pdb.set_trace()
+    angle_x = data['theta']
+    angle_y = data['phi'] 
+    fov =  data['fov']
+    radius = data['radius']
+    cam_trans = get_camera_from_view(angle_x, angle_y, r=radius)
+    mv = torch.eye(4).to(radius.device).unsqueeze(0)
+    mv = mv.repeat_interleave(cam_trans.shape[0], dim=0)
+    mv[:, 0, :3] = cam_trans[:, :3, 0]
+    mv[:, 1, :3] = cam_trans[:, :3, 1]
+    mv[:, 2, :3] = cam_trans[:, :3, 2]
+    mv[:, :3, 3] = cam_trans[:, 3, :3]
+    proj = perspective(fov[0, 0].cpu().numpy(), dims[0]/dims[1], near, far).unsqueeze(0)
+    proj = proj.to(radius.device)
+    proj = proj.repeat_interleave(mv.shape[0], dim=0)
+    mvp = proj @ mv
+    campos = torch.linalg.inv(mv)[:, :3, 3]
+    trans = torch.eye(4).to(device)
+    trans[1, 1] = -1
+    trans[2, 2] = -1
+    trans = trans.unsqueeze(0)
+    mv = trans @ mv
+    return mv, mvp, campos, proj
+
+def get_camera_from_view(elev, azim, r=3.0, look_at_height=0.0, device='cuda'):
+    """
+    get_camera_from_views
+    """
+    # import pdb; pdb.set_trace()
+    x = r * torch.sin(elev) * torch.sin(azim)
+    y = r * torch.cos(elev)
+    z = r * torch.sin(elev) * torch.cos(azim)
+
+    pos = torch.cat([x, y, z], dim=1)
+    look_at = torch.zeros_like(pos)
+    look_at[:, 1] = look_at_height
+    direction = torch.tensor([0.0, 1.0, 0.0]).unsqueeze(0).to(device)
+    direction = direction.repeat_interleave(pos.shape[0], dim=0)
+
+    camera_proj = kaolin.render.camera.generate_transformation_matrix(pos, look_at, direction)
+    #import pdb; pdb.set_trace()
+    return camera_proj
+
 def depth_to_normal(depth):
     normal_tmp = kornia.filters.spatial_gradient(depth.detach().permute(0, 3, 1, 2), normalized=False)
     normal_x = normal_tmp[:, :, 0, ...]

@@ -29,7 +29,7 @@ class CameraDataset(Dataset):
         super().__init__()
         self.device = device
         if mode == 'round1':
-            azims_np = np.arange(15) * (360. / 16.)
+            azims_np = np.arange(26) * (360. / 27.)
             #azims_np = np.array([0, 30, 90, 150, 210, 270, 330])
             elevs_np = 80 * np.ones_like(azims_np)
             #elevs_np = np.array([90, 60, 110, 60, 110, 60, 110])
@@ -41,9 +41,9 @@ class CameraDataset(Dataset):
             self.radius = torch.from_numpy(radius_np).to(self.device).to(torch.float32)
             self.fov = torch.FloatTensor([np.pi / 3]).to(self.device).to(torch.float32) #degree
         else:
-            azims_np = np.arange(8) * (360. / 9.)
+            azims_np = np.arange(11) * (360. / 12.)
             #azims_np = np.append(azims_np, [0, 90, 180, 270])
-            elevs_np = 80 * np.ones_like(np.arange(8))
+            elevs_np = 80 * np.ones_like(np.arange(11))
             #elevs_np = np.append(elevs_np, [60, 60, 60, 60])
             radius_np = 1.1 * np.ones_like(azims_np)
             azims_np = np.deg2rad(azims_np)

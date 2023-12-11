@@ -1,0 +1,8 @@
+diffusers==0.20.2
+pyrallis
+matplotlib
+opencv-python
+transformers
+loguru
+imageio
+accelerate
