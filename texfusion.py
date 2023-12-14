@@ -96,7 +96,7 @@ class TexFusion(object):
             f_open.write('%f %f %f %f %f %f\n'%(fx / 2, 0.0, 0.0, 1.0, 0.5, 0.5))
             f_open.close()
     
-        def run_mvstexturing(self, scene_path=None, out_path=None):
+    def run_mvstexturing(self, scene_path=None, out_path=None):
         """
         run_mvstexturing
         """
@@ -211,7 +211,7 @@ class TexFusion(object):
         self.cache = None
         self.render_images(self.texture_map, self.camera_poses)
         self.numviews = self.camera_poses['elevs'].shape[0]
-        self.texture_map = F.interpolate(self.texture_map, scale_factor=3., mode='nearest')
+        self.texture_map = F.interpolate(self.texture_map, scale_factor=2., mode='nearest')
         self.prompt_embeds = []
         for i in range(self.numviews):
             # import pdb; pdb.set_trace()
@@ -223,6 +223,8 @@ class TexFusion(object):
         self.update_Q() 
         ###########################################
         #TODO add noise in texture_map with T=500
+        noise = torch.randn_like(self.texture_map)
+        self.texture_map = self.mvd.scheduler.add_noise(self.texture_map, noise, self.timesteps[20])
 
         for ts in tqdm(range(20, len(self.timesteps))):
             self.interlaced_denoise(ts, tau=0)
@@ -238,8 +240,7 @@ class TexFusion(object):
                 tmp_img.save(os.path.join(output_path, 'stage2_{:04d}.png'.format(i)))
         
         self.nerf()
-
-            
+        
     def interlaced_denoise(self, ts=0, tau=0.5):
         """
         interlaced denoise multi views
@@ -294,9 +295,6 @@ class TexFusion(object):
             view_mask = self.render_images(self.tmp_update_mask.float(), index=v).permute(0, 3, 1, 2)
             view_mask_img = tf.ToPILImage()(view_mask[0])
             view_mask_img.save(os.path.join(self.output_path, 'mask_{:02d}.png'.format(v)))
-            
-
-
                 
     def update_texture(self, img, idx):
         texture_map_bkp = self.texture_map.detach().clone()
@@ -366,7 +364,6 @@ class TexFusion(object):
             # import pdb; pdb.set_trace()
             new_uv = new_uv[mask[:, :, 0] == 1] #N, 2
             self.Q[i, 0, new_uv[:, 0], new_uv[:, 1]] = self.quality[i][mask == 1]
-
 
     def render_images(self, texture_map, camera_poses=None, index=None, dims=[64, 64], mode='nearest'):
         # import pdb; pdb.set_trace()
@@ -481,6 +478,7 @@ class TexFusion(object):
             all_tex = all_tex['color'].reshape((resolution[0], resolution[1], 3))
         self.texture_map = all_tex.permute(2, 0, 1).unsqueeze(0)
         plt.imsave(os.path.join(self.output_path, 'mesh', 'tex_final.png'), self.texture_map[0].permute(1, 2, 0).clamp(0, 1).detach().cpu().numpy())
+
 @pyrallis.wrap()
 def main(cfg: ModelConfig):
     texfusion = TexFusion(cfg, device='cuda')
